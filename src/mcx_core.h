@@ -194,6 +194,7 @@ typedef struct  __align__(16) KernelParams {
     unsigned int nangle;               /**< number of samples for launch angle inverse-cdf, will be added by 2 to include 0 and 1 on the two ends */
     unsigned int nanglelen;            /**< even-rounded nangle so that shared memory buffer won't give an error */
     float omega;                       /**< modulation angular frequency (2*pi*f), in rad/s, for FD/RF replay */
+    float gamma;		                /**< Letizia 6.2.2024*/
     unsigned char bc[12];              /**< boundary condition flags, copy the first 12 chars from cfg->bc without the terminating NULL */
 } MCXParam;
 

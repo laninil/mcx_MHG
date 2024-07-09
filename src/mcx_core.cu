@@ -164,6 +164,53 @@ __device__ float dot(const float3& a, const float3& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+    
+/* Defining equation to be solved.*/
+__host__ __device__ double phase_function(double x, double g, double a, double t){
+    return a*(1.f-g*g)/(2.f*g*pow((1.+g*g-2.*g*x),0.5))+(1.f-a)*x*x*x/2.f-a*(1.f-g)/(2.f*g)+(1.f-a)/2.f-t;
+}
+
+/* Defining derivative of g(x).*/
+__host__ __device__ double phase_function_der(double x, double g, double a){
+    return a*(1.f-g*g)/(2.f*pow((1.+g*g-2.*g*x),1.5))+3.f*(1-a)*x*x/2.f;
+}
+
+__host__ __device__ double newtonRaphson(double a, double g, double t)
+{
+	float x0, tolerance;
+    x0 = 1.f;
+	tolerance = 1e-7;
+	int N = 5e2;
+    float x=x0;
+
+//     printf("yes2");
+
+    for (int i = 0; i < N; ++i) {
+        float fx = phase_function(x, g, a, t);
+        float dfx = phase_function_der(x, g, a);
+        // printf("i=%4.2d", i);
+        // printf("dfx=%4.2f", dfx);
+
+        // Check for division by zero
+        if (dfx == 0.0) {
+            //printf("stop");
+            return NAN; // Not a number, indicating failure
+        }
+
+        float deltaX = fx / dfx;
+        x -= deltaX;
+        // printf("x=%4.2f", x);
+
+        // Check if the change in x is small enough
+        if (fabs(deltaX) < tolerance) {
+            return x;
+        }
+    }
+
+    // printf("overN");
+    return NAN; // Not a number, indicating failure to converge
+}
+
 /**
  * @brief Concatenated optical properties and det positions, stored in constant memory
  *
@@ -1894,11 +1941,22 @@ __global__ void mcx_main_loop(uint media[], OutputType field[], float genergy[],
                     } else {
                         tmp0 = (v.nscat > gcfg->gscatter) ? 0.f : prop.g;
 
-                        /** Here we use Henyey-Greenstein Phase Function, "Handbook of Optical Biomedical Diagnostics",2002,Chap3,p234, also see Boas2002 */
+                        /** Here we use Modified Henyey-Greenstein Phase Function, "F. Bevilacqua, C. Depeursinge (1999) "Monte Carlo study of diffuse reflectance at source-detector separations close to one transport mean free path"; "Handbook of Optical Biomedical Diagnostics",2002,Chap3,p234, also see Boas2002 */
                         if (fabsf(tmp0) > EPS) { //< if prop.g is too small, the distribution of theta is bad
-                            tmp0 = (1.f - prop.g * prop.g) / (1.f - prop.g + 2.f * prop.g * rand_next_zangle(t));
-                            tmp0 *= tmp0;
-                            tmp0 = (1.f + prop.g * prop.g - tmp0) / (2.f * prop.g);
+
+                            float gamma = (gcfg->gamma);
+//                            printf("gamma1=%g\n", gamma);
+                            float alpha = (gamma - 3.f/5.f)/(gamma * prop.g -prop.g * prop.g + 2.f/5.f);
+//                            printf("alpha=%4.2f \n", alpha);
+//                             tmp0 = (1.f - g1 * g1) / (1.f - g1 + 2.f * g1 * rand_next_zangle(t));       //MHG implemented by Letizia
+//                             tmp0 *= tmp0;
+//                             tmp0 = (1.f + g1 * g1 - tmp0) / (2.f * g1);
+    
+//                             printf("yes1");
+                            float rand = rand_next_zangle(t);
+//                             printf("rand=%4.2f \n", rand);
+                            tmp0 = newtonRaphson(alpha, prop.g, rand);   //returns the optimal value of cos(theta) that solve the equation
+//                            printf("cos(theta)=%4.2f \n", tmp0);
 
                             // in early CUDA, when ran=1, CUDA gives 1.000002 for tmp0 which produces nan later
                             // detected by Ocelot,thanks to Greg Diamos,see http://bit.ly/cR2NMP
@@ -2785,8 +2843,8 @@ void mcx_run_simulation(Config* cfg, GPUInfo* gpu) {
                       cfg->maxdetphoton * hostdetreclen, cfg->seed, (uint)cfg->outputtype, 0, 0, cfg->faststep,
                       cfg->debuglevel, cfg->savedetflag, hostdetreclen, partialdata, w0offset, cfg->mediabyte,
                       (uint)cfg->maxjumpdebug, cfg->gscatter, is2d, cfg->replaydet, cfg->srcnum,
-                      cfg->nphase, cfg->nphase + (cfg->nphase & 0x1), cfg->nangle, cfg->nangle + (cfg->nangle & 0x1), cfg->omega
-                     };
+                      cfg->nphase, cfg->nphase + (cfg->nphase & 0x1), cfg->nangle, cfg->nangle + (cfg->nangle & 0x1), cfg->omega, cfg->gamma
+                     };     //Letizia 7.2.2024: added gamma
 
     if (param.isatomic) {
         param.skipradius2 = 0.f;

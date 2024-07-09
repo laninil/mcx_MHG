@@ -160,6 +160,7 @@ end
 Session = copycfg(cfg, 'nphoton', Session, 'Photons');
 Session = copycfg(cfg, 'minenergy', Session, 'MinEnergy');
 Session = copycfg(cfg, 'rootpath', Session, 'RootPath');
+Session = copycfg(cfg, 'gamma', Session, 'Gamma');
 
 %% define the forward simulation settings
 

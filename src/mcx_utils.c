@@ -108,7 +108,7 @@
 const char shortopt[] = {'h', 'i', 'f', 'n', 't', 'T', 's', 'a', 'g', 'b', '-', 'z', 'u', 'H', 'P',
                          'd', 'r', 'S', 'p', 'e', 'U', 'R', 'l', 'L', '-', 'I', '-', 'G', 'M', 'A', 'E', 'v', 'D',
                          'k', 'q', 'Y', 'O', 'F', '-', '-', 'x', 'X', '-', 'K', 'm', 'V', 'B', 'W', 'w', '-',
-                         '-', '-', 'Z', 'j', '-', '-', '-', '\0'
+                         '-', '-', 'Z', 'j', 'J',  '-', '-', '-', '\0'
                         };
 
 /**
@@ -336,6 +336,7 @@ void mcx_initcfg(Config* cfg) {
     cfg->gscatter = 1e9;   /** by default, honor anisotropy for all scattering, use --gscatter to reduce it */
     cfg->nphase = 0;
     cfg->invcdf = NULL;
+    cfg->gamma = 1.f;		/** added by Letizia,  6.2.2024*/
     cfg->nangle = 0;
     cfg->angleinvcdf = NULL;
     cfg->srcid = 0;
@@ -3040,6 +3041,10 @@ int mcx_loadjson(cJSON* root, Config* cfg) {
         if (!flagset['V']) {
             cfg->isspecular = FIND_JSON_KEY("DoSpecular", "Session.DoSpecular", Session, cfg->isspecular, valueint);
         }
+        
+        if (!flagset['J']) {
+            cfg->gamma = FIND_JSON_KEY("Gamma", "Session.Gamma", Session, cfg->gamma, valuedouble);
+        }
 
         if (!flagset['D']) {
             if (FIND_JSON_KEY("DebugFlag", "Session.DebugFlag", Session, "", valuestring)) {
@@ -3711,6 +3716,12 @@ void mcx_validatecfg(Config* cfg, float* detps, int dimdetps[2], int seedbyte) {
                 cfg->srcdata[i].srcpos.y--;
                 cfg->srcdata[i].srcpos.z--;
             }
+        }
+    }
+
+    for (int i = 1; i < cfg->medianum; i++) {
+        if (cfg->gamma >= 1.f + cfg->prop[i].g) {
+            MCX_ERROR(-6, "field 'gamma' must be <1+g");
         }
     }
 
@@ -4967,6 +4978,9 @@ void mcx_parsecmd(int argc, char* argv[], Config* cfg) {
                 case 'V':
                     i = mcx_readarg(argc, argv, i, &(cfg->isspecular), "char");
                     break;
+
+                case 'J':
+                   	i = mcx_readarg(argc, argv, i, &(cfg->gamma), "float");
 
                 case 'v':
                     mcx_version(cfg);
