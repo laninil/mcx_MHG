@@ -144,6 +144,11 @@
           "title": "Random seed",
           "type": "number",
           "default": 1648335518
+        },
+        "Gamma": {
+          "title": "Gamma",
+          "type": "number",
+          "default": 1
         }
       }
     },
