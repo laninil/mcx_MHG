@@ -1,165 +1,45 @@
 
-Monte Carlo eXtreme (MCX) - CUDA Edition
+Monte Carlo eXtreme (MCX) - CUDA Edition - with Modified Henyey-Greenstein phase function
 =========================
 
--   Author: Qianqian Fang (q.fang at neu.edu)
+-   Author: Letizia Lanini
+-   From the work of: Qianqian Fang (q.fang at neu.edu)
 -   License: GNU General Public License version 3 (GPLv3)
 -   Version: 2.6.pre (v2024.6, Jumbo Jolt)
 -   Website: <https://mcx.space>
 -   Download: <https://mcx.space/wiki/?Get>
 
-![Mex and Binaries](https://github.com/fangq/mcx/actions/workflows/build_all.yml/badge.svg)\
-![Linux Python Module](https://github.com/fangq/mcx/actions/workflows/build_linux_manywheel.yml/badge.svg)\
-![MacOS Python Module](https://github.com/fangq/mcx/actions/workflows/build_macos_wheel.yml/badge.svg)\
-![Windows Python Module](https://github.com/fangq/mcx/actions/workflows/build_windows_wheel.yml/badge.svg)
-
-Table of Content:
-
-  * [What's New](#whats-new)
-  * [Introduction](#introduction)
-  * [Requirement and Installation](#requirement-and-installation)
-  * [Running Simulations](#running-simulations)
-  * [Using JSON-formatted input files](#using-json-formatted-input-files)
-  * [Using JSON-formatted shape description files](#using-json-formatted-shape-description-files)
-  * [Output data formats](#output-data-formats)
-    + [Volumetric output](#volumetric-output)
-    + [Detected photon data](#detected-photon-data)
-    + [Photon trajectory data](#photon-trajectory-data)
-  * [Using MCXLAB in MATLAB and Octave](#using-mcxlab-in-matlab-and-octave)
-  * [Using MCX Studio GUI](#using-mcx-studio-gui)
-  * [Interpreting the Output](#interpreting-the-output)
-    + [Output files](#output-files)
-    + [Console print messages](#console-print-messages)
-  * [Best practices guide](#best-practices-guide)
-    + [Use dedicated GPUs](#use-dedicated-gpus)
-    + [Launch as many threads as possible](#launch-as-many-threads-as-possible)
-  * [Acknowledgement](#acknowledgement)
-    + [cJSON library by Dave Gamble](#cjson-library-by-dave-gamble)
-    + [myslicer toolbox by Anders Brun](#myslicer-toolbox-by-anders-brun)
-    + [Texture3D Sample Project by Jürgen Abel](#texture3d-sample-project-by-jürgen-abel)
-  * [Reference](#reference)
-
 What's New
 -------------
 
-MCX v2024.2 contains both major new features and critical bug fixes.
-It is a strongly recommended upgrade for all users.
+MCX v2024.2 with modifications apported to implement the Modified Henyey-Greenstein as phase function.
 
-Specifically, MCX v2024.2 received three important new features:
+The files that have been changed are the following:
 
-* user-defined photon launch angle distribution (fangq/mcx#13)
-* simulate multiple sources in a single session (fangq/mcx#163)
-* per-voxel mua/mus/g/n format support (fangq/mcx#203)
+* src/mcx_core.cu
+* src/mcx_core.h
+* src/mcxlab.cpp
+* src/mcx_utils.c
+* src/mcx_utils.h
+* schema/mcxinput.json
+* utils/mcx2json.m
 
-Similar to the user-defined phase-function feature included in
-MCX v2023, the first feature allows users to define the zenith angle distribution for
-launching a photon, relative to the source-direction vector, also via
-a discretized inverse CDF (cumulative distribution function).
-In MATLAB/Octave, they can be set as `cfg.invcdf` or `cfg.angleinvcdf`, 
-respectively. We provided ready-to-use demo scripts in 
-`mcxlab/examples/demo_mcxlab_phasefun.m` and `demo_mcxlab_launchangle.m`.
+Changes include definition of the Modified Henyey-Greenstein (MHG) phase function in mcx_core.cu, 
+instead of commonly used Henyey-Greenstein phase function. This change allows to have a more accurate
+simulation of short light propagation distances. The modified phase function embeds a second
+order moment g2 in addition to usual methods that only consider first order moment g1, in order to
+tune backward scattering in a more accurate way for not yet isotropic systems. 
+In order to generate values of cos(theta) from random numbers, we require the use of a numerical method
+to solve the corresponding equation. For this reason, a Newton Method has been implemented in mcx_core.cu.
 
-The second feature allow users to specify more then one sources of the
-same type when defining `srcpos`, `srcdir`, `srcparam1` and `srcparam2`.
-Each source can have independent weight controled by the 4th element of srcpos.
+Additionally, a new variable \gamma has been defined and has to be given as input in the form
+cfg.gamma. This variable is defined as gamma = (1-g2)/(1-g1). It is a similarity relation so 
+as \mu'_s, meaning that all combinations of g1 and g2 that lead to the same gamma, also lead
+to the same reflectance, and is therefore convenient in reducing the number of parameters.
+Limits for gamma require: cfg.gamma <= 1 + prop.g
 
-Aside from new features, a severe bug was discovered that affects all 
-`pattern` and `pattern3d` simulations that do not use photon-sharing, 
-please see
-
-https://github.com/fangq/mcx/issues/212
-
-Because of this bug, MCX/MCX-CL in older releases has been simulating squared
-pattern/pattern3d data instead of the pattern itself. If your simulation
-uses these two source types and you do not use photon-sharing (i.e. simulating
-multiple patterns together), please upgrade your MCX/MCX-CL and rerun your
-simulations. This bug only affect volumetric fluence/flux outputs; it does not
-affect diffuse reflectance outputs or binary patterns.
-
-It also includes a bug fix from fangq/mcx#195 regarding precision loss when
-saving diffuse reflectance.
-
-We want to thank Haohui Zhang for reporting a number of critical issues
-(fangq/mcx#195 and fangq/mcx#212), Liam Keegan for contributing a patch
-to extend the slit source (fangq/mcx#214). ShijieYan and fanyuyen have also contributed
-to the bug fixes and improvements.
-
-The detailed updates can be found in the below change log
-
-* 2024-03-13 [abdee14] [bug] fix multi-source replay bug, close #215
-* 2024-03-11 [9250a0d] [doc] make final doc update, bump pmcx to v0.3.2
-* 2024-03-10 [4e7f404] [ci] revert to windows-2019, add help info for #214, add note on nvidia-uvm
-* 2024-03-10 [2750d70] [ci] choco install is failing on Windows, see actions/runner-images#9477
-* 2024-03-10 [7b6e0e0] [optimize] cut hyperboloid gaussian register use from 15 to 3, #127,#214
-* 2024-03-10 [a2279d6] [optimize] reduce gaussian slit register use from 9 to 2, #214
-* 2024-03-08 [4708e10] [doc] Create pull_request_template.md
-* 2024-03-08 [14ca45d] [feat] use 'make register' to report register counts in the Makefile
-* 2024-03-07 [411a007] [feat] add gaussian broadening to slit source (contributed by Liam Keegan, #214)
-* 2024-03-04 [1e6c403] [doc] update instructions on running mcx on hybrid GPU Linux laptops
-* 2024-03-04 [0344d84] [bug] fix cuda core count for Ada and Blackwell
-* 2024-02-27 [558dbab] [pmcx] bump pmcx to 0.2.12 after fixing critical bug #212
-* 2024-02-27 [8e03878] \*[bug] critical: fix double-multiplication of pattern launched weight, fix #212
-* 2024-02-23 [61ae0b8] [bug] fix detid value #209
-* 2024-02-23 [90e2419] [bug] fix pmcx dettpsf overwrites input bug
-* 2024-02-21 [744fba2] [bug] update srcparam2 after volume preprocessing close #206
-* 2024-02-18 [dbb23be] [ci] test removing lazhelphtml.pas to avoid error on linux/macos runners
-* 2024-02-18 [4c88de2] [ci] test fix for lazarus 3.0 build error on macos action
-* 2024-02-18 [54f732e] [mcxcloud] support backup servers, support x/y/z slice view and time-gates
-* 2024-02-16 [8a8ff90] [ci] install libomp before downgrade xcode
-* 2024-02-16 [99ca38f] [ci] test libomp error on macos runners
-* 2024-02-13 [cb9b6c2] [doc] update openjdata to neurojson
-* 2024-02-04 [007ecce] [feat] accept 3-element srcparam1/srcparam2 in mcxlab/pmcx
-* 2024-01-23 [20b0aa2] [minor] debug addlog callback error
-* 2024-01-23 [f63f73b] [bug] fix chrome webpage error messages
-* 2024-01-11 [73fe834] [mcxcloud] add the missing flag to show optional json fields
-* 2024-01-01 [0eb1a48] [doc] update changelog
-* 2024-01-01 [4232764] [mcxlab] add speed comparison between different media formats
-* 2024-01-01 [3bca606] [minor] fix typo
-* 2024-01-01 [51003bc] \*[format] automatic format all matlab script with miss_hit
-* 2024-01-01 [9951dd8] [minor] update copyright year
-* 2024-01-01 [0f48b8f] [format] update source unit header info
-* 2024-01-01 [6707eaa] [bug] fix detp output bug after adding srcid, #163
-* 2024-01-01 [49b5cef] [ci] update lazarus on windows to avoid build crash
-* 2024-01-01 [9dc832d] \*[feat] support --srcid to simulate all, one or separate sources, #163
-* 2023-12-31 [f5b4aaa] [minor] fix file name spelling
-* 2023-12-30 [7e1aec0] \*[feat] simulate multiple sources, close #163
-* 2023-12-29 [59f18a7] \*[feat] complete per-voxel mua/mus/g/n format support, close #203
-* 2023-12-29 [1e3b031] [feat] initial implementation of mua/mus/g/n all float format
-* 2023-12-29 [1100e36] [bug] fix mcx2json bug when exporting 4D vol, fix #200
-* 2023-12-17 [9831c7e] [debug] print jdata compression message inside matlab
-* 2023-11-27 [28e5101] [pmcx] bump pmcx version to 0.2.7
-* 2023-11-27 [fae5b72] [pmcx] typecast traj.id from float to uint32, fix #199
-* 2023-11-16 [4eec905] [mcxlab] add demo script comparing conv vs direct area src
-* 2023-11-10 [6771752] [ci] fix matlab mex error after mingw64 was removed, matlab-actions/setup-matlab#75
-* 2023-11-08 [f4aec48] [ci] test conda command to install octave on mac
-* 2023-11-08 [c976cbf] [ci] brew refuses to install octave, switch to conda
-* 2023-11-07 [325a522] [release] post v2023 release action
-* 2023-11-07 [a710ab3] allow converting integer cfg.vol to json
-* 2023-10-31 [d6c64e4] [test] fix rng test after make double
-* 2023-10-30 [08361eb] [pmcx] bump pmcx to v0.2.6 with dref fix #195
-* 2023-10-30 [9220578] \*[bug] apply #41 like 2xfloat-buffer for dref accumulation, fix #195
-* 2023-10-24 [961d059] pattern json data rstrict to single,set show_opt_in option
-* 2023-10-24 [5f130fc] use 2d pattern by default
-* 2023-10-24 [db608f7] use jq to format json schema; add Source.Pattern in schema
-* 2023-10-14 [4c365f9] update zh-cn translation
-* 2023-10-12 [8d23726] fix windows ci error
-* 2023-10-12 [2904cc3] avoid error when compressing binaries
-* 2023-10-12 [2ebe3de] include language locale files in github CI build
-* 2023-10-12 [5782cff] enable DefaultTranslator for i18n support in mcxstudio
-* 2023-10-11 [833d117] add compiled mo locale file
-* 2023-10-11 [ad298c1] add initial translation for simplified Chinese
-* 2023-10-11 [aa15780] add strings from additional forms
-* 2023-10-10 [14285a0] \*prepare for adding i18n support
-* 2023-10-10 [c5496ac] \*force invcdf/angleinvcdf even count of float, reapply 53d7ac0, fix #193
-* 2023-10-09 [ca1bf2b] use focal-length to select interpolation or discrete mode, #129
-* 2023-10-08 [be8b8c3] \*support user-defined launch angle profile, fix #129
-* 2023-10-03 [2ad9307] update winget package files to the v2023 release
-* 2023-10-03 [26ede84] rename winget package file
-* 2023-10-03 [2e71a51] treat cfg->bc as a null-ending string, #191 #192
-* 2023-10-03 [68db492] make cfg->bc a null terminated string
-* 2023-10-02 [35170f9] Merge pull request #192 from lkeegan/pmcx_bc_overflow_error
-* 2023-10-02 [3c77170] Fix buffer overflow error when bc has 12 characters
-
+STILL TO DO: some changes have been apported to schema/mcxinput.json and utils/mcx2json.m to add gamma
+as json variable. However, the utility and correctness of these changes still has to be prooved.
 
 Introduction
 ---------------
