@@ -12,7 +12,7 @@ Monte Carlo eXtreme (MCX) - CUDA Edition - with Modified Henyey-Greenstein phas
 What's New
 -------------
 
-MCX v2024.2 with modifications apported to implement the Modified Henyey-Greenstein as phase function.
+MCX v2024.2 with modifications apported to implement the Modified Henyey-Greenstein phase function.
 
 The files that have been changed are the following:
 
